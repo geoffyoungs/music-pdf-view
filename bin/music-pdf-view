@@ -1,0 +1,51 @@
+#!/usr/bin/env ruby
+
+$: << File.dirname(__FILE__)+"/../lib"
+require 'music-pdf-view'
+
+require 'gtk2'
+require 'poppler'
+
+
+win= Gtk::Window.new
+win.signal_connect(:delete_event) { Gtk.main_quit }
+win.add(vbox = Gtk::VBox.new)
+win.set_default_size(1024,768)
+view = Music::Pdf::View::Widget.new(ARGV[0])
+
+vbox.pack_start(view, true, true, 0)
+vbox.pack_end(hbox = Gtk::HBox.new, false, false, 0)
+
+spin = {}
+hbox.pack_start(Gtk::Label.new.set_markup("<b>Margins</b>"),false,false,0)
+[:top, :bottom, :left, :right].each do |key|
+  hbox.pack_start(Gtk::Label.new(key.to_s),false,false,0)
+  hbox.pack_start(spin[key] = Gtk::SpinButton.new(0,500,1), false, false, 8)
+  spin[key].value = view.renderer.margin.send(key)
+  spin[key].signal_connect(:value_changed) do |w,e|
+    view.set_margin(key, w.value)
+  end
+end
+
+hbox.pack_end(print = Gtk::Button.new(Gtk::Stock::PRINT), false, false, 0)
+
+print.signal_connect(:clicked) do
+  op = Gtk::PrintOperation.new
+  setup = Gtk::PageSetup.new
+  setup.orientation = :landscape
+  op.set_default_page_setup(setup)
+  name = File.basename(ARGV[0]).sub(/\.pdf/,'')
+  op.set_job_name "#{name}-1sheet"
+  op.set_export_filename "#{name}-1sheet.pdf"
+  op.n_pages = 1
+  op.signal_connect(:draw_page) do |_, ctx, pg|
+    cr = ctx.cairo_context
+    view.renderer.draw(cr, ctx.width, ctx.height)
+  end
+  op.run(Gtk::PrintOperation::ACTION_PRINT_DIALOG, win)
+end
+
+win.show_all
+
+Gtk.main
+
